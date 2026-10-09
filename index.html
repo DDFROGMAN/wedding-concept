@@ -1,5 +1,11 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>우리의 웨딩 컨셉</title>
+<meta name="description" content="스튜디오 · 드레스 · 메이크업, 저희가 고민 중인 웨딩 컨셉을 모아 봤어요.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="우리의 웨딩 컨셉">
+<meta property="og:description" content="스튜디오 · 드레스 · 메이크업, 저희가 고민 중인 웨딩 컨셉을 모아 봤어요.">
+<meta property="og:locale" content="ko_KR">
+<meta name="theme-color" content="#fff8f6">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Noto+Sans+KR:wght@300;400;500&family=Noto+Serif+KR:wght@300;400&display=swap">
@@ -23,6 +29,9 @@
   --line: #3e352c; --accent: #dc8a80; --accent-ink: #2a1b17; color-scheme: dark;
 }
 .head-actions { display: flex; gap: 8px; align-items: center; }
+.toast { position: fixed; left: 50%; top: calc(18px + env(safe-area-inset-top, 0px)); translate: -50% -16px; z-index: 40; padding: 10px 22px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 500; letter-spacing: .02em; box-shadow: 0 6px 24px rgba(0,0,0,.18); opacity: 0; pointer-events: none; transition: opacity .2s, translate .2s; max-width: calc(100% - 32px); text-align: center; }
+.toast.show { opacity: 1; translate: -50% 0; }
+.toast.err { background: #c0504d; color: #fff; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-weight: 300; line-height: 1.6; }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
@@ -166,11 +175,17 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
 
   /* ---------- 서버 저장 (Firebase 연결 시) ---------- */
   function fbSet(p) { return fb.f.setDoc(fb.f.doc(fb.db, 'photos', p.id), p); }
+  var toastEl = null, toastTimer = null;
+  function toast(msg, err) {
+    if (!toastEl) { toastEl = document.createElement('div'); toastEl.className = 'toast'; toastEl.setAttribute('role', 'status'); document.body.appendChild(toastEl); }
+    toastEl.textContent = msg; toastEl.className = 'toast show' + (err ? ' err' : '');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.className = 'toast' + (err ? ' err' : ''); }, err ? 5000 : 2200);
+  }
   function cloud(fn) {
     if (!fb) return Promise.resolve();
     setStatus('저장 중…');
-    return fn().then(function () { setStatus('저장됐어요. 공유 링크에도 바로 반영돼요.'); })
-      .catch(function (e) { setStatus('저장 실패: ' + (e.code || e.message), true); });
+    return fn().then(function () { setStatus('저장됐어요. 공유 링크에도 바로 반영돼요.'); toast('저장됨 ✓'); })
+      .catch(function (e) { setStatus('저장 실패: ' + (e.code || e.message), true); toast('저장 실패: ' + (e.code || e.message), true); });
   }
   function dbUpdate(id, patch) { return cloud(function () { return fb.f.updateDoc(fb.f.doc(fb.db, 'photos', id), patch); }); }
   function dbDelete(id) { return cloud(function () { return fb.f.deleteDoc(fb.f.doc(fb.db, 'photos', id)); }); }
@@ -254,7 +269,8 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       '<input id="srcInput" class="srcin" type="text" maxlength="120" placeholder="예: 핀터레스트, 인스타그램 @계정, 스튜디오 이름" value="' + esc((list[cur] || {}).source || '') + '"></div>' : '';
     return '<div class="tools">' + srcBox + '<label class="drop" id="drop" for="file"><input type="file" id="file" accept="image/*" multiple>' +
       '<b>' + cat.ko + ' · 후보 ' + c + '</b>에 추가됩니다<br>사진을 끌어다 놓거나, 복사한 이미지를 붙여넣기(Ctrl+V), 또는 눌러서 파일을 선택하세요</label>' +
-      '<div class="meter">사진 용량 ' + mb(usedBytes()) + ' / ' + mb(LIMIT) + ' MB</div>' +
+      '<div class="meter">사진 용량 ' + mb(usedBytes()) + ' / ' + mb(LIMIT) + ' MB' +
+      (photos.length ? ' &nbsp;·&nbsp; <button class="chip ghost" id="backupBtn" type="button">전체 백업 받기</button>' : '') + '</div>' +
       '<div class="status' + (statusErr ? ' err' : '') + '" id="status" role="status" aria-live="polite">' + status + '</div>' +
       (list.length ? '<div class="strip">' + strip + '</div>' : '') + '</div>';
   }
@@ -357,6 +373,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       if (fb) { clearTimeout(srcTimer); srcTimer = setTimeout(function () { dbUpdate(p.id, { source: p.source }); }, 700); }
       else if (!dirty) { dirty = true; $app.insertAdjacentHTML('beforeend', '<div class="savebar"><span>내보내지 않은 변경이 있어요.</span><button id="saveBtn">내보내기</button></div>'); q('saveBtn').onclick = save; }
     };
+    if (q('backupBtn')) q('backupBtn').onclick = backup;
     if (q('addCand')) q('addCand').onclick = function () { saveCands(1); };
     if (q('delCand')) q('delCand').onclick = function () { saveCands(-1); };
     $app.querySelectorAll('.pick').forEach(function (b) { b.onclick = function () { pos[key()] = +b.dataset.i; render(); }; });
@@ -443,6 +460,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       if (full) msg += ' 용량이 가득 차서 ' + full + '장은 넣지 못했어요. 안 쓰는 사진을 지워 주세요.';
       if (fail) msg += ' ' + fail + '장은 읽지 못했어요. JPG나 PNG인지 확인해 주세요.';
       status = msg; statusErr = !!(fail || full);
+      if (fb) { if (ok) toast(ok + '장 저장됨 ✓'); else if (fail || full) toast('저장하지 못했어요', true); }
       render();
     })();
   }
@@ -463,6 +481,21 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     clearTimeout(delTimer); pendingDel = null;
     photos = photos.filter(function (x) { return x.id !== id; });
     touch(); render(); dbDelete(id);
+  }
+
+  /* ---------- 전체 백업: 사진 + 설정을 JSON 파일 하나로 받기 ---------- */
+  function backup() {
+    try {
+      var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+      var stamp = d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
+      var data = JSON.stringify({ exportedAt: d.toISOString(), config: config, photos: photos });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+      a.download = 'wedding-concept-backup-' + stamp + '.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      toast('백업 파일을 받았어요 (' + photos.length + '장)');
+    } catch (e) { toast('백업 파일을 만들지 못했어요', true); }
   }
 
   function saveCands(delta) {
