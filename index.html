@@ -413,8 +413,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     var js = document.getElementById('app-js').textContent;
     var st = JSON.stringify({ config: config, photos: photos }).replace(/</g, '\\u003c');
     var fonts = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Noto+Sans+KR:wght@300;400;500&family=Noto+Serif+KR:wght@300;400&display=swap">';
-    return '<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>우리의 웨딩 컨셉</title>' + fonts +
+    return '<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>우리의 웨딩 컨셉</title>' + fonts +
       '<style id="app-css">' + css + '</style></head><body>' +
       '<div class="wrap" id="app"><div class="notice">불러오는 중…</div></div>' +
       '<script type="application/json" id="state">' + st + '<\/script><script id="app-js">' + js + '<\/script></body></html>';
