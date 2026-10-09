@@ -7,27 +7,22 @@
 /* Layout: 헤더 + 카테고리 탭 → 후보 칩 → 화면 가득 큰 사진 1장(좌우 넘김) → 최종 컨셉은 ♥ 사진 모음 */
 :root {
   color-scheme: light;
-  --bg: #ece2d0;
-  --panel: #f7f1e6;
-  --ink: #3b3128;
-  --muted: #877866;
-  --line: #d6c8b0;
-  --accent: #b85f55;
-  --accent-ink: #fff8ef;
+  --bg: #fff8f6;
+  --panel: #fdeef1;
+  --ink: #5b4a55;
+  --muted: #a08d98;
+  --line: #f1dce2;
+  --accent: #e8a0b4;
+  --accent-ink: #ffffff;
   --font-display: "Cormorant Garamond", "Noto Serif KR", Georgia, serif;
   --font-ko: "Noto Serif KR", "Batang", serif;
   --font-body: "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #1d1814; --panel: #29221c; --ink: #efe5d4; --muted: #a39580;
-    --line: #3e352c; --accent: #dc8a80; --accent-ink: #2a1b17; color-scheme: dark;
-  }
 }
 :root[data-theme="dark"] {
   --bg: #1d1814; --panel: #29221c; --ink: #efe5d4; --muted: #a39580;
   --line: #3e352c; --accent: #dc8a80; --accent-ink: #2a1b17; color-scheme: dark;
 }
+.head-actions { display: flex; gap: 8px; align-items: center; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-weight: 300; line-height: 1.6; }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
@@ -40,7 +35,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: c
 h1 em { font-style: italic; }
 .sub { margin: 6px 0 0; color: var(--muted); font-size: 13px; letter-spacing: .08em; }
 .edit-toggle { font-size: 13px; letter-spacing: .06em; padding: 8px 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
-.edit-toggle[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.edit-toggle[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
 nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
 nav.tabs button { padding: 12px 18px; font-size: 15px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; letter-spacing: .04em; }
@@ -51,7 +46,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
 .cands .lbl { font-size: 12px; color: var(--muted); letter-spacing: .12em; margin-right: 6px; }
 .chip { min-width: 44px; padding: 7px 16px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-display); font-size: 19px; line-height: 1.2; color: var(--muted); text-align: center; }
 .chip small { font-family: var(--font-body); font-size: 11px; margin-left: 6px; opacity: .7; }
-.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .chip.ghost { border-style: dashed; font-family: var(--font-body); font-size: 13px; }
 
 .stage { position: relative; height: clamp(380px, 76dvh, 940px); background: var(--panel); border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: pan-y; user-select: none; }
@@ -107,7 +102,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
 .lb img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .lb .close { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); right: 14px; width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; font-size: 22px; z-index: 3; background: var(--bg); }
 
-.savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); font-size: 14px; }
+.savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--panel); color: var(--ink); border-top: 1px solid var(--line); font-size: 14px; }
 .savebar button { background: var(--accent); color: var(--accent-ink); padding: 8px 22px; border-radius: 999px; font-weight: 500; }
 .savebar button[disabled] { opacity: .6; cursor: default; }
 .source { margin: 10px 2px 0; font-size: 12px; color: var(--muted); letter-spacing: .03em; text-align: right; overflow-wrap: anywhere; }
@@ -209,8 +204,9 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       return '<button role="tab" data-tab="' + c.id + '" aria-selected="' + (tab === c.id) + '"><span class="en">' + c.en + '</span>' + c.ko + '</button>';
     }).join('') + '<button role="tab" data-tab="final" aria-selected="' + (tab === 'final') + '"><span class="en">Final</span>최종 컨셉</button>';
     return '<header><div><h1>Our Wedding <em>Concept</em></h1><p class="sub">스튜디오 · 드레스 · 메이크업</p></div>' +
+      '<div class="head-actions"><button class="edit-toggle" id="themeToggle" aria-label="화면 모드 바꾸기">' + (theme() === 'dark' ? '☀ 밝게' : '☾ 어둡게') + '</button>' +
       (canWrite ? '<button class="edit-toggle" id="editToggle" aria-pressed="' + edit + '">' + (edit ? '편집 끝내기' : '사진 편집') + '</button>' : '') +
-      '</header><nav class="tabs" role="tablist">' + tabs + '</nav>';
+      '</div></header><nav class="tabs" role="tablist">' + tabs + '</nav>';
   }
 
   function catView() {
@@ -322,7 +318,16 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     }, { passive: true });
   }
 
+  /* ---------- 밝게/어둡게 (고른 모드는 이 기기에 기억) ---------- */
+  function theme() { return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('wc-theme', t); } catch (e) {}
+  }
+  try { if (localStorage.getItem('wc-theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {}
+
   function bindHead() {
+    var tt = document.getElementById('themeToggle'); if (tt) tt.onclick = function () { setTheme(theme() === 'dark' ? 'light' : 'dark'); render(); };
     $app.querySelectorAll('[data-tab]').forEach(function (b) { b.onclick = function () { go(b.dataset.tab); }; });
     var et = document.getElementById('editToggle'); if (et) et.onclick = function () { edit = !edit; pendingDel = null; setStatus(''); render(); };
   }
@@ -507,7 +512,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
 
   function loginView() {
     $app.innerHTML = '<div class="notice"><p style="margin:0 0 16px;color:var(--ink)">편집하려면 Google 계정으로 로그인해 주세요.</p>' +
-      '<button class="edit-toggle" id="gbtn" type="button" style="background:var(--ink);color:var(--bg)">Google로 로그인</button>' +
+      '<button class="edit-toggle" id="gbtn" type="button" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent)">Google로 로그인</button>' +
       '<div class="status" id="lfs" role="status" style="margin-top:12px"></div></div>';
     document.getElementById('gbtn').onclick = function () {
       fb.f.signInWithPopup(fb.auth, new fb.f.GoogleAuthProvider())
