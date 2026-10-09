@@ -65,6 +65,9 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
 .heart[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .heart[aria-pressed="true"] svg { fill: currentColor; }
 .heart[disabled] { cursor: default; }
+.pop { position: absolute; left: 50%; top: 50%; width: 110px; height: 110px; translate: -50% -50%; color: var(--accent); pointer-events: none; z-index: 3; animation: pop .7s ease-out forwards; }
+.pop svg { width: 100%; height: 100%; fill: currentColor; stroke: none; }
+@keyframes pop { 0% { opacity: 0; scale: .5; } 25% { opacity: .95; scale: 1.1; } 100% { opacity: 0; scale: 1; } }
 .count { position: absolute; left: 16px; bottom: 16px; font-family: var(--font-display); font-size: 20px; letter-spacing: .08em; color: var(--ink); background: color-mix(in srgb, var(--bg) 82%, transparent); padding: 2px 14px; border-radius: 999px; font-variant-numeric: tabular-nums; z-index: 2; }
 .empty { text-align: center; color: var(--muted); max-width: 34ch; padding: 24px; margin: auto; }
 .empty strong { display: block; font-family: var(--font-ko); font-weight: 400; font-size: 20px; color: var(--ink); margin-bottom: 8px; }
@@ -121,7 +124,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
   .stage { height: clamp(340px, 68dvh, 720px); }
   nav.tabs button { padding-inline: 12px; }
 }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head><body>
 <div class="wrap" id="app"><div class="notice">불러오는 중…</div></div>
@@ -170,7 +173,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     else html += catView();
     if (lb) html += lbView();
     if (dirty) html += '<div class="savebar"><span>내보내지 않은 변경이 있어요.</span><button id="saveBtn">내보내기</button></div>';
-    $app.innerHTML = html;
+    $app.innerHTML = html; popNext = false;
     bindHead(); bindView();
     var imgEl = document.querySelector('.stage img'); if (imgEl) preload();
   }
@@ -206,6 +209,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       stage = '<button class="nav prev" id="prev" aria-label="이전 사진"' + (i2 === 0 ? ' disabled' : '') + '>' + ICON_L + '</button>' +
         '<img src="' + urlOf(p) + '" alt="' + cat.ko + ' 후보 ' + c + ' ' + (i2 + 1) + '번 사진" draggable="false">' +
         '<button class="nav next" id="next" aria-label="다음 사진"' + (i2 === list.length - 1 ? ' disabled' : '') + '>' + ICON_R + '</button>' +
+        (popNext ? '<span class="pop" aria-hidden="true">' + ICON_H + '</span>' : '') +
         '<span class="count">' + (i2 + 1) + ' / ' + list.length + '</span>' +
         '<button class="heart" id="heart" aria-pressed="' + !!p.liked + '" aria-label="마음에 들어요"' + (canWrite ? '' : ' disabled') + '>' + ICON_H + '</button>';
     }
@@ -276,6 +280,13 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
   }
   function lbStep(d) { if (lb) { lb.i += d; render(); } }
 
+  var lastHeart = 0, popNext = false;
+  function toggleHeart() {
+    var now = Date.now(); if (now - lastHeart < 450 || !canWrite) return; lastHeart = now;
+    var p = listFor(tab, cand[tab])[pos[key()] || 0]; if (!p) return;
+    p.liked = !p.liked; popNext = p.liked; touch(); render();
+  }
+
   function swipe(el, onLeft, onRight) {
     var x0 = null;
     el.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
@@ -296,9 +307,17 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     if (q('prev')) q('prev').onclick = function () { step(-1); };
     if (q('next')) q('next').onclick = function () { step(1); };
     if (q('stage')) swipe(q('stage'), function () { step(1); }, function () { step(-1); });
-    if (q('heart')) q('heart').onclick = function () {
-      var p = listFor(tab, cand[tab])[pos[key()] || 0]; if (p) { p.liked = !p.liked; touch(); render(); }
-    };
+    if (q('heart')) q('heart').onclick = toggleHeart;
+    var st = q('stage'); if (st && canWrite) {
+      st.addEventListener('dblclick', function (e) { if (!e.target.closest('button')) toggleHeart(); });
+      var tapAt = 0, tx = 0, ty = 0;
+      st.addEventListener('touchend', function (e) {
+        if (e.target.closest('button') || e.changedTouches.length !== 1) return;
+        var t = e.changedTouches[0], now = Date.now();
+        if (now - tapAt < 320 && Math.abs(t.clientX - tx) < 30 && Math.abs(t.clientY - ty) < 30) { tapAt = 0; e.preventDefault(); toggleHeart(); }
+        else { tapAt = now; tx = t.clientX; ty = t.clientY; }
+      });
+    }
     if (q('saveBtn')) q('saveBtn').onclick = save;
     var si = q('srcInput'); if (si) si.oninput = function () {
       var p = listFor(tab, cand[tab])[pos[key()] || 0]; if (!p) return;
