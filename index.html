@@ -138,6 +138,19 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     { id: 'makeup', ko: '메이크업', en: 'Makeup' }
   ];
   var MAX_CANDS = 6;
+  /* Firebase 연결 (설정 방법은 README.txt 참고). null 이면 예전처럼 "내보내기" 방식으로 동작해요. */
+  var FIREBASE_CONFIG = {
+    apiKey: 'AIzaSyC5Ge75QoH8JngngXPIotFT21v8FL0qCCc',
+    authDomain: 'wedding-concept.firebaseapp.com',
+    projectId: 'wedding-concept',
+    storageBucket: 'wedding-concept.firebasestorage.app',
+    messagingSenderId: '821090079650',
+    appId: '1:821090079650:web:2c24ed0d399670df0ad8fb'
+  };
+  var OWNER_EMAIL = 'ycyc8806@gmail.com'; /* 편집 권한을 가질 Google 계정 (Firestore 규칙과 같아야 해요) */
+  var SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  var fb = null; /* 연결되면 { db, auth, f } */
+  var isEditUrl = /(^|[?&])edit(&|=|$)/.test(location.search);
   var artifactApi = null, canWrite = false, dirty = false, saving = false;
   var saved = { config: { cands: { studio: 3, dress: 3, makeup: 3 } }, photos: [] };
   try { saved = JSON.parse(document.getElementById('state').textContent); } catch (e) {}
@@ -154,7 +167,20 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
   var urlOf = function (p) { return p.src; };
   var usedBytes = function () { return photos.reduce(function (s, p) { return s + p.src.length; }, 0); };
   var mb = function (n) { return (n / 1048576).toFixed(1); };
-  function touch() { dirty = true; }
+  function touch() { if (!fb) dirty = true; }
+
+  /* ---------- 서버 저장 (Firebase 연결 시) ---------- */
+  function fbSet(p) { return fb.f.setDoc(fb.f.doc(fb.db, 'photos', p.id), p); }
+  function cloud(fn) {
+    if (!fb) return Promise.resolve();
+    setStatus('저장 중…');
+    return fn().then(function () { setStatus('저장됐어요. 공유 링크에도 바로 반영돼요.'); })
+      .catch(function (e) { setStatus('저장 실패: ' + (e.code || e.message), true); });
+  }
+  function dbUpdate(id, patch) { return cloud(function () { return fb.f.updateDoc(fb.f.doc(fb.db, 'photos', id), patch); }); }
+  function dbDelete(id) { return cloud(function () { return fb.f.deleteDoc(fb.f.doc(fb.db, 'photos', id)); }); }
+  function dbConfig() { return cloud(function () { return fb.f.setDoc(fb.f.doc(fb.db, 'meta', 'config'), config); }); }
+  var srcTimer = null;
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   var catOf = function (id) { return CATS.filter(function (c) { return c.id === id; })[0]; };
   var sorted = function (a) { return a.slice().sort(function (x, y) { return x.order - y.order; }); };
@@ -284,7 +310,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
   function toggleHeart() {
     var now = Date.now(); if (now - lastHeart < 450 || !canWrite) return; lastHeart = now;
     var p = listFor(tab, cand[tab])[pos[key()] || 0]; if (!p) return;
-    p.liked = !p.liked; popNext = p.liked; touch(); render();
+    p.liked = !p.liked; popNext = p.liked; touch(); render(); dbUpdate(p.id, { liked: p.liked });
   }
 
   function swipe(el, onLeft, onRight) {
@@ -323,7 +349,8 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       var p = listFor(tab, cand[tab])[pos[key()] || 0]; if (!p) return;
       p.source = si.value.trim();
       var line = q('srcLine'); if (line) { line.hidden = !p.source; line.textContent = '출처 · ' + p.source; }
-      if (!dirty) { dirty = true; $app.insertAdjacentHTML('beforeend', '<div class="savebar"><span>내보내지 않은 변경이 있어요.</span><button id="saveBtn">내보내기</button></div>'); q('saveBtn').onclick = save; }
+      if (fb) { clearTimeout(srcTimer); srcTimer = setTimeout(function () { dbUpdate(p.id, { source: p.source }); }, 700); }
+      else if (!dirty) { dirty = true; $app.insertAdjacentHTML('beforeend', '<div class="savebar"><span>내보내지 않은 변경이 있어요.</span><button id="saveBtn">내보내기</button></div>'); q('saveBtn').onclick = save; }
     };
     if (q('addCand')) q('addCand').onclick = function () { saveCands(1); };
     if (q('delCand')) q('delCand').onclick = function () { saveCands(-1); };
@@ -370,14 +397,21 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
         var s = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
         var cv = document.createElement('canvas'); cv.width = Math.round(im.naturalWidth * s); cv.height = Math.round(im.naturalHeight * s);
         cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
-        try { resolve(cv.toDataURL('image/jpeg', 0.8)); } catch (e) { reject(e); }
+        try {
+          var out = cv.toDataURL('image/jpeg', 0.8);
+          if (fb) { /* Firestore 문서 하나는 1MB 미만이어야 해요 */
+            if (out.length > 850000) out = cv.toDataURL('image/jpeg', 0.6);
+            if (out.length > 850000) out = cv.toDataURL('image/jpeg', 0.45);
+          }
+          resolve(out);
+        } catch (e) { reject(e); }
       };
       im.onerror = function () { URL.revokeObjectURL(url); reject(new Error('읽을 수 없는 이미지')); };
       im.src = url;
     });
   }
 
-  var busy = false;
+  var busy = false, lastErr = '';
   function addFiles(files) {
     files = files.filter(function (f) { return /^image\//.test(f.type); });
     if (!files.length || !canWrite) return;
@@ -390,13 +424,17 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
         try {
           var src = await shrink(files[i]);
           if (usedBytes() + src.length > LIMIT) { full++; continue; }
-          photos.push({ id: 'p' + base.toString(36) + i + Math.random().toString(36).slice(2, 6), cat: cat, cand: c, src: src, order: base + i, liked: false });
+          if (fb && src.length > 900000) { fail++; continue; }
+          var np = { id: 'p' + base.toString(36) + i + Math.random().toString(36).slice(2, 6), cat: cat, cand: c, src: src, order: base + i, liked: false };
+          if (fb) await fbSet(np);
+          photos.push(np);
           ok++;
-        } catch (e) { fail++; }
+        } catch (e) { fail++; if (fb) lastErr = e.code || e.message; }
       }
       busy = false;
       if (ok) { touch(); pos[cat + c] = Math.max(0, listFor(cat, c).length - ok); }
-      var msg = ok + '장 추가했어요. 화면 아래 내보내기를 눌러 파일을 받아야 사이트에 반영돼요.';
+      var msg = fb ? ok + '장 올렸어요. 공유 링크에도 바로 반영돼요.' : ok + '장 추가했어요. 화면 아래 내보내기를 눌러 파일을 받아야 사이트에 반영돼요.';
+      if (fb && fail && lastErr) msg += ' (오류: ' + lastErr + ')';
       if (full) msg += ' 용량이 가득 차서 ' + full + '장은 넣지 못했어요. 안 쓰는 사진을 지워 주세요.';
       if (fail) msg += ' ' + fail + '장은 읽지 못했어요. JPG나 PNG인지 확인해 주세요.';
       status = msg; statusErr = !!(fail || full);
@@ -409,6 +447,8 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     if (i < 0 || !list[j]) return;
     var t = list[i].order; list[i].order = list[j].order; list[j].order = t;
     pos[key()] = j; touch(); render();
+    var a = list[i], b = list[j];
+    if (fb) cloud(function () { return Promise.all([fb.f.updateDoc(fb.f.doc(fb.db, 'photos', a.id), { order: a.order }), fb.f.updateDoc(fb.f.doc(fb.db, 'photos', b.id), { order: b.order })]); });
   }
 
   function del(id) {
@@ -417,13 +457,13 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     }
     clearTimeout(delTimer); pendingDel = null;
     photos = photos.filter(function (x) { return x.id !== id; });
-    touch(); render();
+    touch(); render(); dbDelete(id);
   }
 
   function saveCands(delta) {
     var cs = config.cands; cs[tab] = Math.max(1, Math.min(MAX_CANDS, (cs[tab] || 3) + delta));
     if (delta < 0) cand[tab] = 'A';
-    touch(); render();
+    touch(); render(); dbConfig();
   }
 
   /* ---------- 내보내기: 편집한 내용을 새 index.html 파일로 받기 ---------- */
@@ -450,8 +490,43 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
   }
 
   /* ---------- boot ---------- */
-  canWrite = /(^|[?&])edit(&|=|$)/.test(location.search);
-  render();
+  async function initCloud() {
+    var m = await Promise.all([import(SDK + 'firebase-app.js'), import(SDK + 'firebase-firestore.js'), import(SDK + 'firebase-auth.js')]);
+    var app = m[0].initializeApp(FIREBASE_CONFIG);
+    var f = Object.assign({}, m[1], m[2]);
+    fb = { db: f.getFirestore(app), auth: f.getAuth(app), f: f };
+    var res = await Promise.all([f.getDocs(f.collection(fb.db, 'photos')), f.getDoc(f.doc(fb.db, 'meta', 'config'))]);
+    photos = res[0].docs.map(function (d) { return d.data(); });
+    if (res[1].exists() && res[1].data().cands) config = res[1].data();
+    LIMIT = 300 * 1024 * 1024;
+    if (isEditUrl) {
+      var user = await new Promise(function (ok) { var off = f.onAuthStateChanged(fb.auth, function (u) { off(); ok(u); }); });
+      canWrite = !!(user && user.email && user.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
+    }
+  }
+
+  function loginView() {
+    $app.innerHTML = '<div class="notice"><p style="margin:0 0 16px;color:var(--ink)">편집하려면 Google 계정으로 로그인해 주세요.</p>' +
+      '<button class="edit-toggle" id="gbtn" type="button" style="background:var(--ink);color:var(--bg)">Google로 로그인</button>' +
+      '<div class="status" id="lfs" role="status" style="margin-top:12px"></div></div>';
+    document.getElementById('gbtn').onclick = function () {
+      fb.f.signInWithPopup(fb.auth, new fb.f.GoogleAuthProvider())
+        .then(function () { location.reload(); })
+        .catch(function (e) { var s = document.getElementById('lfs'); s.className = 'status err'; s.textContent = '로그인하지 못했어요. (' + (e.code || e.message) + ')'; });
+    };
+  }
+
+  (async function boot() {
+    if (!FIREBASE_CONFIG) { canWrite = isEditUrl; render(); return; }
+    try { await initCloud(); }
+    catch (e) { fb = null; $app.innerHTML = '<div class="notice">서버에서 사진을 불러오지 못했어요.<br><small>' + esc(e.code || e.message || '') + '</small></div>'; return; }
+    if (isEditUrl && !canWrite) {
+      var u = fb.auth.currentUser;
+      if (u) { $app.innerHTML = '<div class="notice">이 계정(' + esc(u.email || '') + ')은 편집 권한이 없어요.</div>'; return; }
+      loginView(); return;
+    }
+    render();
+  })();
 })();
 </script>
 </body></html>
