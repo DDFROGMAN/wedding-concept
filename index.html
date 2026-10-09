@@ -59,7 +59,10 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
 .chip.ghost { border-style: dashed; font-family: var(--font-body); font-size: 13px; }
 
 .stage { position: relative; height: clamp(380px, 76dvh, 940px); background: var(--panel); border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: pan-y; user-select: none; }
-.stage img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; -webkit-user-drag: none; }
+.stage img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; -webkit-user-drag: none; transform-origin: center; will-change: transform; }
+.note { margin: 6px 2px 0; font-size: 14px; color: var(--ink); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-line; }
+.masonry .note-cap { color: var(--ink); text-align: left; white-space: pre-line; }
+.srcin.notein { resize: vertical; min-height: 64px; line-height: 1.5; }
 .nav { position: absolute; top: 50%; translate: 0 -50%; width: 52px; height: 52px; border-radius: 50%; background: color-mix(in srgb, var(--bg) 82%, transparent); color: var(--ink); display: grid; place-items: center; border: 1px solid var(--line); transition: background .15s; z-index: 2; }
 .nav:hover { background: var(--bg); }
 .nav[disabled] { opacity: .25; cursor: default; }
@@ -108,7 +111,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
 .none { color: var(--muted); font-size: 14px; padding: 18px; border: 1px dashed var(--line); border-radius: 4px; }
 
 .lb { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 96%, #000); display: flex; align-items: center; justify-content: center; padding: 16px; touch-action: pan-y; }
-.lb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.lb img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; will-change: transform; }
 .lb .close { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); right: 14px; width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; font-size: 22px; z-index: 3; background: var(--bg); }
 
 .savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--panel); color: var(--ink); border-top: 1px solid var(--line); font-size: 14px; }
@@ -190,7 +193,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
   function dbUpdate(id, patch) { return cloud(function () { return fb.f.updateDoc(fb.f.doc(fb.db, 'photos', id), patch); }); }
   function dbDelete(id) { return cloud(function () { return fb.f.deleteDoc(fb.f.doc(fb.db, 'photos', id)); }); }
   function dbConfig() { return cloud(function () { return fb.f.setDoc(fb.f.doc(fb.db, 'meta', 'config'), config); }); }
-  var srcTimer = null;
+  var srcTimer = null, noteTimer = null;
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   var catOf = function (id) { return CATS.filter(function (c) { return c.id === id; })[0]; };
   var sorted = function (a) { return a.slice().sort(function (x, y) { return x.order - y.order; }); };
@@ -209,7 +212,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     else html += catView();
     if (lb) html += lbView();
     if (dirty) html += '<div class="savebar"><span>내보내지 않은 변경이 있어요.</span><button id="saveBtn">내보내기</button></div>';
-    $app.innerHTML = html; popNext = false;
+    $app.innerHTML = html; popNext = false; zoomScale = 1;
     bindHead(); bindView();
     var imgEl = document.querySelector('.stage img'); if (imgEl) preload();
   }
@@ -252,7 +255,8 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     }
     var curP = list[i2];
     var out = '<div class="cands">' + chips + '</div><div class="stage" id="stage">' + stage + '</div>' +
-      (curP ? '<p class="source" id="srcLine"' + (curP.source ? '' : ' hidden') + '>출처 · ' + esc(curP.source || '') + '</p>' : '');
+      (curP ? '<p class="note" id="noteLine"' + (curP.note ? '' : ' hidden') + '>' + esc(curP.note || '') + '</p>' +
+        '<p class="source" id="srcLine"' + (curP.source ? '' : ' hidden') + '>출처 · ' + esc(curP.source || '') + '</p>' : '');
     if (edit) out += tools(list, i2, cat, c);
     return out;
   }
@@ -267,7 +271,9 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     }).join('');
     var srcBox = list.length ? '<div><label for="srcInput" class="meter">지금 보는 사진의 출처 (사진 아래에 작게 표시돼요)</label>' +
       '<input id="srcInput" class="srcin" type="text" maxlength="120" placeholder="예: 핀터레스트, 인스타그램 @계정, 스튜디오 이름" value="' + esc((list[cur] || {}).source || '') + '"></div>' : '';
-    return '<div class="tools">' + srcBox + '<label class="drop" id="drop" for="file"><input type="file" id="file" accept="image/*" multiple>' +
+    var noteBox = list.length ? '<div><label for="noteInput" class="meter">지금 보는 사진의 메모 (사진 아래에 보여요. 예: 허리라인이 마음에 들어요)</label>' +
+      '<textarea id="noteInput" class="srcin notein" maxlength="300" rows="2" placeholder="이 사진에 대한 한마디">' + esc((list[cur] || {}).note || '') + '</textarea></div>' : '';
+    return '<div class="tools">' + srcBox + noteBox + '<label class="drop" id="drop" for="file"><input type="file" id="file" accept="image/*" multiple>' +
       '<b>' + cat.ko + ' · 후보 ' + c + '</b>에 추가됩니다<br>사진을 끌어다 놓거나, 복사한 이미지를 붙여넣기(Ctrl+V), 또는 눌러서 파일을 선택하세요</label>' +
       '<div class="meter">사진 용량 ' + mb(usedBytes()) + ' / ' + mb(LIMIT) + ' MB' +
       (photos.length ? ' &nbsp;·&nbsp; <button class="chip ghost" id="backupBtn" type="button">전체 백업 받기</button>' : '') + '</div>' +
@@ -282,7 +288,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       out += '<section class="fsec"><h3><span class="en">' + c.en + '</span>' + c.ko + '<span class="n">' + liked.length + '장</span></h3>';
       if (!liked.length) out += '<div class="none">아직 고른 사진이 없어요.</div>';
       else out += '<div class="masonry">' + liked.map(function (p, i) {
-        return '<button data-lb="' + c.id + '" data-i="' + i + '" aria-label="' + c.ko + ' ' + (i + 1) + '번 크게 보기"><img src="' + urlOf(p) + '" alt="" loading="lazy"><span class="tag">' + p.cand + '</span>' + (p.source ? '<span class="cap">출처 · ' + esc(p.source) + '</span>' : '') + '</button>';
+        return '<button data-lb="' + c.id + '" data-i="' + i + '" aria-label="' + c.ko + ' ' + (i + 1) + '번 크게 보기"><img src="' + urlOf(p) + '" alt="" loading="lazy"><span class="tag">' + p.cand + '</span>' + (p.note ? '<span class="cap note-cap">' + esc(p.note) + '</span>' : '') + (p.source ? '<span class="cap">출처 · ' + esc(p.source) + '</span>' : '') + '</button>';
       }).join('') + '</div>';
       out += '</section>';
     });
@@ -300,7 +306,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       '<img src="' + urlOf(l[lb.i]) + '" alt="">' +
       '<button class="nav next" id="lbNext" aria-label="다음 사진"' + (lb.i === l.length - 1 ? ' disabled' : '') + '>' + ICON_R + '</button>' +
       '<span class="count">' + (lb.i + 1) + ' / ' + l.length + '</span>' +
-      (l[lb.i].source ? '<span class="lbcap">출처 · ' + esc(l[lb.i].source) + '</span>' : '') + '</div>';
+      ((l[lb.i].note || l[lb.i].source) ? '<span class="lbcap">' + (l[lb.i].note ? esc(l[lb.i].note) : '') + (l[lb.i].note && l[lb.i].source ? ' · ' : '') + (l[lb.i].source ? '출처 · ' + esc(l[lb.i].source) : '') + '</span>' : '') + '</div>';
   }
 
   function preload() {
@@ -325,12 +331,46 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     p.liked = !p.liked; popNext = p.liked; touch(); render(); dbUpdate(p.id, { liked: p.liked });
   }
 
+  /* 좌우 스와이프. 두 손가락(확대) 중이거나 확대된 상태에서는 넘기지 않아요. */
+  var zoomScale = 1;
   function swipe(el, onLeft, onRight) {
-    var x0 = null;
-    el.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    var x0 = null, multi = false;
+    el.addEventListener('touchstart', function (e) {
+      if (e.touches.length > 1) multi = true;
+      else if (!multi) x0 = e.touches[0].clientX;
+    }, { passive: true });
     el.addEventListener('touchend', function (e) {
-      if (x0 === null) return; var dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (e.touches.length) return;
+      var was = multi; multi = false;
+      if (x0 === null || was || zoomScale > 1) { x0 = null; return; }
+      var dx = e.changedTouches[0].clientX - x0; x0 = null;
       if (Math.abs(dx) > 50) (dx < 0 ? onLeft : onRight)();
+    }, { passive: true });
+  }
+
+  /* 두 손가락 벌려서 확대(최대 4배), 확대 중에는 한 손가락으로 이동. 손을 떼고 1배 근처면 원래대로 */
+  function zoomable(el) {
+    var img = el && el.querySelector('img'); if (!img) return;
+    var s = 1, tx = 0, ty = 0, d0 = 0, s0 = 1, px = 0, py = 0, mode = '';
+    var apply = function () { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')'; zoomScale = s; };
+    var dist = function (t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY) || 1; };
+    el.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 2) { mode = 'pinch'; d0 = dist(e.touches); s0 = s; }
+      else if (e.touches.length === 1 && s > 1) { mode = 'pan'; px = e.touches[0].clientX - tx; py = e.touches[0].clientY - ty; }
+    }, { passive: true });
+    el.addEventListener('touchmove', function (e) {
+      if (mode === 'pinch' && e.touches.length === 2) {
+        e.preventDefault(); s = Math.max(1, Math.min(4, s0 * dist(e.touches) / d0));
+        if (s === 1) { tx = 0; ty = 0; } apply();
+      } else if (mode === 'pan' && e.touches.length === 1 && s > 1) {
+        e.preventDefault(); tx = e.touches[0].clientX - px; ty = e.touches[0].clientY - py; apply();
+      }
+    }, { passive: false });
+    el.addEventListener('touchend', function (e) {
+      if (e.touches.length === 0) { mode = ''; if (s < 1.05) { s = 1; tx = 0; ty = 0; } apply(); }
+      else if (e.touches.length === 1 && mode === 'pinch') {
+        if (s > 1) { mode = 'pan'; px = e.touches[0].clientX - tx; py = e.touches[0].clientY - ty; } else mode = '';
+      }
     }, { passive: true });
   }
 
@@ -353,7 +393,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     var q = function (id) { return document.getElementById(id); };
     if (q('prev')) q('prev').onclick = function () { step(-1); };
     if (q('next')) q('next').onclick = function () { step(1); };
-    if (q('stage')) swipe(q('stage'), function () { step(1); }, function () { step(-1); });
+    if (q('stage')) { swipe(q('stage'), function () { step(1); }, function () { step(-1); }); zoomable(q('stage')); }
     if (q('heart')) q('heart').onclick = toggleHeart;
     var st = q('stage'); if (st && canWrite) {
       st.addEventListener('dblclick', function (e) { if (!e.target.closest('button')) toggleHeart(); });
@@ -373,6 +413,13 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
       if (fb) { clearTimeout(srcTimer); srcTimer = setTimeout(function () { dbUpdate(p.id, { source: p.source }); }, 700); }
       else if (!dirty) { dirty = true; $app.insertAdjacentHTML('beforeend', '<div class="savebar"><span>내보내지 않은 변경이 있어요.</span><button id="saveBtn">내보내기</button></div>'); q('saveBtn').onclick = save; }
     };
+    var ni = q('noteInput'); if (ni) ni.oninput = function () {
+      var p = listFor(tab, cand[tab])[pos[key()] || 0]; if (!p) return;
+      p.note = ni.value.trim();
+      var nl = q('noteLine'); if (nl) { nl.hidden = !p.note; nl.textContent = p.note; }
+      if (fb) { clearTimeout(noteTimer); noteTimer = setTimeout(function () { dbUpdate(p.id, { note: p.note }); }, 700); }
+      else if (!dirty) { dirty = true; $app.insertAdjacentHTML('beforeend', '<div class="savebar"><span>내보내지 않은 변경이 있어요.</span><button id="saveBtn">내보내기</button></div>'); q('saveBtn').onclick = save; }
+    };
     if (q('backupBtn')) q('backupBtn').onclick = backup;
     if (q('addCand')) q('addCand').onclick = function () { saveCands(1); };
     if (q('delCand')) q('delCand').onclick = function () { saveCands(-1); };
@@ -383,7 +430,7 @@ nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: 
     if (q('lbClose')) q('lbClose').onclick = function () { lb = null; render(); };
     if (q('lbPrev')) q('lbPrev').onclick = function () { lbStep(-1); };
     if (q('lbNext')) q('lbNext').onclick = function () { lbStep(1); };
-    if (q('lb')) swipe(q('lb'), function () { lbStep(1); }, function () { lbStep(-1); });
+    if (q('lb')) { swipe(q('lb'), function () { lbStep(1); }, function () { lbStep(-1); }); zoomable(q('lb')); }
     var f = q('file'); if (f) f.onchange = function () { addFiles(Array.prototype.slice.call(f.files)); f.value = ''; };
     var d = q('drop'); if (d) {
       ['dragenter', 'dragover'].forEach(function (ev) { d.addEventListener(ev, function (e) { e.preventDefault(); d.classList.add('over'); }); });
